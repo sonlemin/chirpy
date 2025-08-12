@@ -1,12 +1,10 @@
-
 package main
-
-go get github.com/lib/pq
 
 import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync/atomic"
 )
 
@@ -41,10 +39,6 @@ func handleJson(w http.ResponseWriter, r *http.Request) {
 		Body string `json:"body"`
 	}
 
-	type errorResponse struct {
-		Error string `json:"error"`
-	}
-
 	type cleanResponse struct {
 		Cleaned_body string `json:"cleaned_body"`
 	}
@@ -52,27 +46,48 @@ func handleJson(w http.ResponseWriter, r *http.Request) {
 	req := requestBody{}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(400)
-		err := errorResponse{Error: "Something went wrong"}
-		dat, _ := json.Marshal(err)
-		w.Write(dat)
+		respondWithError(w, 400, "Something went wrong")
 		return
 	}
 
 	if len(req.Body) > 140 {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(400)
-		err := errorResponse{Error: "Chirp is too long"}
-		dat, _ := json.Marshal(err)
-		w.Write(dat)
+		respondWithError(w, 400, "Chirp is too long")
 		return
 	}
 
+	cleanedBody := cleanResponse{Cleaned_body: replaceProfanity(req.Body)}
+	respondWithJSON(w, 200, cleanedBody)
+}
+
+func replaceProfanity(text string) string {
+	badWords := []string{"kerfuffle", "sharbert", "fornax"}
+	splitText := strings.Split(text, " ")
+	for i, word := range splitText {
+		for _, badWord := range badWords {
+			if strings.ToLower(word) == badWord {
+				splitText[i] = "****"
+			}
+		}
+	}
+	joinText := strings.Join(splitText, " ")
+	return joinText
+}
+func respondWithError(w http.ResponseWriter, code int, msg string) {
+	type errorResponse struct {
+		Error string `json:"error"`
+	}
+
+	respondWithJSON(w, code, errorResponse{Error: msg})
+}
+
+func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	valid := cleanResponse{Valid: true}
-	dat, _ := json.Marshal(valid)
+	w.WriteHeader(code)
+	dat, err := json.Marshal(payload)
+	if err != nil {
+		w.WriteHeader(500)
+		return
+	}
 	w.Write(dat)
 }
 
