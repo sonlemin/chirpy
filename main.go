@@ -1,15 +1,33 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
+	"os"
 	"sync/atomic"
+
+	"github.com/joho/godotenv"
+	_ "github.com/lib/pq"
+
+	"chirpy/internal/database"
 )
 
 func main() {
-	apiCfg := &apiConfig{}
+	godotenv.Load()
+	dbURL := os.Getenv("DB_URL")
+	db, err := sql.Open("postgres", dbURL)
+	if err != nil {
+		fmt.Errorf("Error")
+	}
+	defer db.Close()
+
+	dbQueries := database.New(db)
+
+	apiCfg := &apiConfig{
+		dbQueries: dbQueries,
+	}
 
 	const port = "8080"
 	const filepathRoot = "."
@@ -32,6 +50,7 @@ func main() {
 
 type apiConfig struct {
 	fileserverHits atomic.Int32
+	dbQueries      *database.Queries
 }
 
 func handleJson(w http.ResponseWriter, r *http.Request) {
